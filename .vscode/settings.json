@@ -5,6 +5,7 @@
         "stdbool.h": "c",
         "foc_utils.h": "c",
         "stdint.h": "c",
-        "foc.h": "c"
+        "foc.h": "c",
+        "stddef.h": "c"
     }
 }

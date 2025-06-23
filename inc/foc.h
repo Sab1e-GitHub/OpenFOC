@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "lowpass_filter.h"
 #include "pid.h"
@@ -84,15 +85,12 @@ typedef struct
 typedef struct
 {
     float target_speed_rad_per_sec;
-    PID_Controller_TypeDef speed_pid;
 } FOC_VelocityClosedloopParams;
 
 typedef struct
 {
     float target_position_deg;
     float angle_closedloop_kv;
-    PID_Controller_TypeDef position_pid;
-    PID_Controller_TypeDef speed_pid;
 } FOC_AngleClosedloopParams;
 
 typedef struct
@@ -213,36 +211,6 @@ typedef struct
     float align_time_ms;
     float alignment_angle;
 } FOC_InitConfig;
-
-// 角度转弧度
-static inline float deg_to_rad(float deg)
-{
-    return deg * (_PI / 180.0f);
-}
-
-// 弧度转角度
-static inline float rad_to_deg(float rad)
-{
-    return rad * (180.0f / _PI);
-}
-
-// 归一化角度到 [0, 2π)
-static inline float normalize_angle_0_to_2pi(float angle_rad)
-{
-    angle_rad = fmodf(angle_rad, _2PI);
-    if (angle_rad < 0.0f)
-        angle_rad += _2PI;
-    return angle_rad;
-}
-
-// 归一化角度到 [-π, π)
-static inline float normalize_angle_rad(float angle_rad)
-{
-    angle_rad = fmodf(angle_rad + _PI, _2PI);
-    if (angle_rad < 0.0f)
-        angle_rad += _2PI;
-    return angle_rad - _PI;
-}
 
 static inline void speed_calculate(FOC_Instance *foc)
 {

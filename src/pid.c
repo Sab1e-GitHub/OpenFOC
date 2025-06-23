@@ -19,11 +19,12 @@ void pid_init(PID_Controller_TypeDef *pid, float kp, float ki, float kd, float o
     pid->integral = 0.0f;
     pid->prev_error = 0.0f;
     pid->get_micros = get_micros_func;
-    pid->last_timestamp_us = pid->get_micros;
+    pid->last_timestamp_us = pid->get_micros();
 }
 
 float pid_update(PID_Controller_TypeDef *pid, float target, float measured)
 {
+	if(pid->get_micros == NULL)return 0.0f;
     uint64_t now_us = pid->get_micros();
     float dt = (now_us - pid->last_timestamp_us) * 1e-6f;
 

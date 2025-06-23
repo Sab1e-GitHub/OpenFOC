@@ -35,6 +35,38 @@ typedef uint64_t (*GetMicrosFunc)(void); // 时间戳函数指针类型
 float _sin(float a);
 float _cos(float a);
 float _sqrtApprox(float number);
+void foc_delay_us(GetMicrosFunc micros, uint64_t us);
+void foc_delay_ms(GetMicrosFunc micros, uint64_t ms);
+
+// 角度转弧度
+static inline float deg_to_rad(float deg)
+{
+    return deg * (_PI / 180.0f);
+}
+
+// 弧度转角度
+static inline float rad_to_deg(float rad)
+{
+    return rad * (180.0f / _PI);
+}
+
+// 归一化角度到 [0, 2π)
+static inline float normalize_angle_0_to_2pi(float angle_rad)
+{
+    angle_rad = fmodf(angle_rad, _2PI);
+    if (angle_rad < 0.0f)
+        angle_rad += _2PI;
+    return angle_rad;
+}
+
+// 归一化角度到 [-π, π)
+static inline float normalize_angle_rad(float angle_rad)
+{
+    angle_rad = fmodf(angle_rad + _PI, _2PI);
+    if (angle_rad < 0.0f)
+        angle_rad += _2PI;
+    return angle_rad - _PI;
+}
 
 static inline void park_transform(float alpha, float beta, float angle_rad, float *d, float *q)
 {

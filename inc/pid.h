@@ -9,6 +9,7 @@
 #define OPENFOC_PID_H_
 
 #include <stdint.h>
+#include <stddef.h>
 
 typedef uint64_t (*GetMicrosFunc)(void); // 时间戳函数指针类型
 

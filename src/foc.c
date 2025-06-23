@@ -7,29 +7,30 @@
 
 #include "foc.h"
 
-#define DEFALUT_SPEED_PID_KP 100.0f
-#define DEFALUT_SPEED_PID_KI 0.01f
-#define DEFALUT_SPEED_PID_KD 0.1f
+
+#define DEFALUT_POSITION_PID_KP 100
+#define DEFALUT_POSITION_PID_KI 0.01f
+#define DEFALUT_POSITION_PID_KD 0.1f
+#define DEFALUT_POSITIOM_PID_OUT_MAX 6
+
+#define DEFALUT_SPEED_PID_KP 0.02f
+#define DEFALUT_SPEED_PID_KI 0.1f
+#define DEFALUT_SPEED_PID_KD 0.0f
 #define DEFALUT_SPEED_PID_OUT_MAX 20.0f
 
-#define DEFALUT_IQ_PID_KP 0.02f
-#define DEFALUT_IQ_PID_KI 0.1f
+#define DEFALUT_IQ_PID_KP 1.2f
+#define DEFALUT_IQ_PID_KI 3.5f
 #define DEFALUT_IQ_PID_KD 0.0f
-#define DEFALUT_IQ_PID_OUT_MAX 5
+#define DEFALUT_IQ_PID_OUT_MAX 2
 
-#define DEFALUT_ID_PID_KP 1.2f
-#define DEFALUT_ID_PID_KI 3.5f
+#define DEFALUT_ID_PID_KP 0.2f
+#define DEFALUT_ID_PID_KI 0.2f
 #define DEFALUT_ID_PID_KD 0.0f
 #define DEFALUT_ID_PID_OUT_MAX 6
 
-#define DEFALUT_POSITION_PID_KP 0.2f
-#define DEFALUT_POSITION_PID_KI 0.2f
-#define DEFALUT_POSITION_PID_KD 0
-#define DEFALUT_POSITIOM_PID_OUT_MAX 6
-
-#define DEFAULT_IQ_LPF_TS 0.01f
-#define DEFAULT_ID_LPF_TS 0.01f
-#define DEFAULT_SPEED_LPF_TS 0.01f
+#define DEFAULT_IQ_LPF_TS 0.2f
+#define DEFAULT_ID_LPF_TS 0.2f
+#define DEFAULT_SPEED_LPF_TS 0.02f
 
 void foc_set_phase(FOC_Instance *foc, Motor_Phase ch1, Motor_Phase ch2,
                    Motor_Phase ch3)
@@ -301,7 +302,7 @@ float unwrap_angle(float new_angle_rad, FOC_State_TypeDef *state)
 
 FOC_Status foc_auto_detect_phase_order(FOC_Instance *user_foc)
 {
-    uart_printf("Phase order auto-detection started...\r\n");
+    printf("Phase order auto-detection started...\r\n");
 
     Motor_Phase phase_orders[6][3] = {
         {FOC_PHASE_A, FOC_PHASE_B, FOC_PHASE_C},
@@ -317,7 +318,7 @@ FOC_Status foc_auto_detect_phase_order(FOC_Instance *user_foc)
 
     for (int i = 0; i < 6; i++)
     {
-        uart_printf("Testing order: %s\r\n", phase_names[i]);
+        printf("Testing order: %s\r\n", phase_names[i]);
 
         FOC_Instance foc = *user_foc;
         foc_set_phase(&foc, phase_orders[i][0], phase_orders[i][1], phase_orders[i][2]);
@@ -337,37 +338,37 @@ FOC_Status foc_auto_detect_phase_order(FOC_Instance *user_foc)
         for (int j = 0; j < 300; j++)
         {
             foc_run(&foc);
-            foc_delay_ms(1);
+            foc_delay_ms(foc.cfg.get_micros, 1);
             float angle_now = unwrap_angle(foc.cfg.angle_sensor_direction * foc.cfg.callbacks.read_angle(), &foc.state);
             delta_angle_sum += angle_now - angle_last;
             angle_last = angle_now;
         }
 
         bool is_forward = (delta_angle_sum > 0.2f);
-        uart_printf(" -> Net=%.2f rad, Dir=%s\r\n", delta_angle_sum, is_forward ? "FWD" : "REV");
+        printf(" -> Net=%.2f rad, Dir=%s\r\n", delta_angle_sum, is_forward ? "FWD" : "REV");
 
         if (!is_forward)
         {
-            uart_printf(" -> Skipped: reverse direction.\r\n");
+            printf(" -> Skipped: reverse direction.\r\n");
             continue;
         }
 
         // 步骤二：速度闭环电流幅值评分
         foc.cfg.mode = FOC_Mode_Velocity_Closedloop;
         foc.cfg.mode_params.vel_closed.target_speed_rad_per_sec = 2.0f;
-        pid_init(&foc.cfg.mode_params.vel_closed.speed_pid,
+        pid_init(&foc.cfg.speed_pid_controller,
                  DEFALUT_SPEED_PID_KP, DEFALUT_SPEED_PID_KI, DEFALUT_SPEED_PID_KD,
-                 -DEFALUT_SPEED_PID_OUT_MAX, DEFALUT_SPEED_PID_OUT_MAX,foc.cfg.get_micros());
+                 -DEFALUT_SPEED_PID_OUT_MAX, DEFALUT_SPEED_PID_OUT_MAX,foc.cfg.get_micros);
         pid_init(&foc.cfg.iq_pid_controller, DEFALUT_IQ_PID_KP, DEFALUT_IQ_PID_KI, DEFALUT_IQ_PID_KD,
-                 -DEFALUT_IQ_PID_OUT_MAX, DEFALUT_IQ_PID_OUT_MAX,foc.cfg.get_micros());
+                 -DEFALUT_IQ_PID_OUT_MAX, DEFALUT_IQ_PID_OUT_MAX,foc.cfg.get_micros);
         pid_init(&foc.cfg.id_pid_controller, DEFALUT_ID_PID_KP, DEFALUT_ID_PID_KI, DEFALUT_ID_PID_KD,
-                 -DEFALUT_ID_PID_OUT_MAX, DEFALUT_ID_PID_OUT_MAX,foc.cfg.get_micros());
+                 -DEFALUT_ID_PID_OUT_MAX, DEFALUT_ID_PID_OUT_MAX,foc.cfg.get_micros);
 
         float current_sum = 0.0f;
         for (int j = 0; j < 200; j++)
         {
             foc_run(&foc);
-            foc_delay_ms(1);
+            foc_delay_ms(foc.cfg.get_micros, 1);
             float i_mag = fabsf(foc.state.ia) + fabsf(foc.state.ib) + fabsf(foc.state.ic);
             current_sum += i_mag;
         }
@@ -375,7 +376,7 @@ FOC_Status foc_auto_detect_phase_order(FOC_Instance *user_foc)
         float current_avg = current_sum / 200.0f;
         float score = 1.0f / (current_avg + 0.01f);
 
-        uart_printf(" -> I_avg=%.2f A, Score=%.2f\r\n", current_avg, score);
+        printf(" -> I_avg=%.2f A, Score=%.2f\r\n", current_avg, score);
 
         if (score > best_score)
         {
@@ -390,12 +391,12 @@ FOC_Status foc_auto_detect_phase_order(FOC_Instance *user_foc)
                       phase_orders[best_index][0],
                       phase_orders[best_index][1],
                       phase_orders[best_index][2]);
-        uart_printf("Best order: %s (Score=%.2f)\r\n", phase_names[best_index], best_score);
+        printf("Best order: %s (Score=%.2f)\r\n", phase_names[best_index], best_score);
         return FOC_OK;
     }
     else
     {
-        uart_printf("Phase order detection failed!\r\n");
+        printf("Phase order detection failed!\r\n");
         return FOC_ERR;
     }
 }
@@ -414,9 +415,9 @@ void foc_calibrate_zero_electric_angle(FOC_Instance *foc)
                         &foc->state.duty_a, &foc->state.duty_b, &foc->state.duty_c);
         foc_set_corrected_pwm(foc);
 
-        foc_delay_ms(1); // 每毫秒刷新一次
+        foc_delay_ms(foc->cfg.get_micros, 1); // 每毫秒刷新一次
     }
-    foc_delay_ms(200);
+    foc_delay_ms(foc->cfg.get_micros, 200);
     // Step 2: 读取机械角度，转换为电角度
     foc->cfg.zero_electric_angle = normalize_angle_0_to_2pi(
         foc->cfg.pole_pairs * foc->cfg.callbacks.read_angle());
@@ -474,7 +475,7 @@ void foc_run(FOC_Instance *foc)
         break;
 
     case FOC_Mode_Velocity_Closedloop:
-        foc->state.iq = pid_update(&cfg->mode_params.vel_closed.speed_pid,
+        foc->state.iq = pid_update(&cfg->speed_pid_controller,
                                    cfg->mode_params.vel_closed.target_speed_rad_per_sec,
                                    foc->state.speed_rad_per_sec);
         foc->state.id = 0;
@@ -488,8 +489,8 @@ void foc_run(FOC_Instance *foc)
                                   cfg->mode_params.angle_closed.angle_closedloop_kv *
                                       state->speed_rad_per_sec;
 
-        float target_speed = pid_update(&cfg->mode_params.angle_closed.position_pid, 0.0f, compensated_error);
-        foc->state.iq = pid_update(&cfg->mode_params.angle_closed.speed_pid,
+        float target_speed = pid_update(&cfg->position_pid_controller, 0.0f, compensated_error);
+        foc->state.iq = pid_update(&cfg->speed_pid_controller,
                                    target_speed,
                                    foc->state.speed_rad_per_sec);
         foc->state.id = 0;
