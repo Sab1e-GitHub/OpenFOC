@@ -1,6 +1,14 @@
+/*
+ * pid.c
+ *
+ *  Created on: Jun 23, 2025
+ *      Author: Sab1e
+ */
+
 #include "pid.h"
 
-void pid_init(PID_Controller_TypeDef *pid, float kp, float ki, float kd, float out_min, float out_max) {
+void pid_init(PID_Controller_TypeDef *pid, float kp, float ki, float kd, float out_min, float out_max, GetMicrosFunc get_micros_func)
+{
     pid->kp = kp;
     pid->ki = ki;
     pid->kd = kd;
@@ -10,15 +18,18 @@ void pid_init(PID_Controller_TypeDef *pid, float kp, float ki, float kd, float o
 
     pid->integral = 0.0f;
     pid->prev_error = 0.0f;
-    pid->last_timestamp_us = MICROS;
+    pid->get_micros = get_micros_func;
+    pid->last_timestamp_us = pid->get_micros;
 }
 
-float pid_update(PID_Controller_TypeDef *pid, float target, float measured) {
-    uint64_t now_us = MICROS;
+float pid_update(PID_Controller_TypeDef *pid, float target, float measured)
+{
+    uint64_t now_us = pid->get_micros();
     float dt = (now_us - pid->last_timestamp_us) * 1e-6f;
 
     // 防止异常 dt
-    if (dt <= 0.0f || dt > 0.3f) {
+    if (dt <= 0.0f || dt > 0.3f)
+    {
         dt = 1e-3f;
     }
 

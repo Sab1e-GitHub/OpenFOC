@@ -1,13 +1,21 @@
-#ifndef OPENFOC_FOC_MATH_H
-#define OPENFOC_FOC_MATH_H
+/*
+ * foc_utils.h
+ *
+ *  Created on: Jun 23, 2025
+ *      Author: Sab1e
+ */
 
-#include "foc.h"
+#ifndef OPENFOC_FOC_MATH_H_
+#define OPENFOC_FOC_MATH_H_
 
-#define _sign(a) ( ( (a) < 0 )  ?  -1   : ( (a) > 0 ) )
-#define _round(x) ((x)>=0?(long)((x)+0.5):(long)((x)-0.5))
-#define _constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
+#include <math.h>
+#include <stdint.h>
+
+#define _sign(a) (((a) < 0) ? -1 : ((a) > 0))
+#define _round(x) ((x) >= 0 ? (long)((x) + 0.5) : (long)((x) - 0.5))
+#define _constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 #define _sqrt(a) (_sqrtApprox(a))
-#define _isset(a) ( (a) != (NOT_SET) )
+#define _isset(a) ((a) != (NOT_SET))
 
 #define _2_SQRT3 1.15470053838
 #define _SQRT3 1.73205080757
@@ -22,29 +30,37 @@
 #define _3PI_2 4.71238898038
 #define _PI_6 0.52359877559
 
+typedef uint64_t (*GetMicrosFunc)(void); // 时间戳函数指针类型
+
 float _sin(float a);
 float _cos(float a);
 float _sqrtApprox(float number);
 
-static inline void park_transform(float alpha, float beta, float angle_rad, float *d, float *q) {
+static inline void park_transform(float alpha, float beta, float angle_rad, float *d, float *q)
+{
     float cos_theta = _cos(angle_rad);
     float sin_theta = _sin(angle_rad);
     *d = alpha * cos_theta + beta * sin_theta;
     *q = -alpha * sin_theta + beta * cos_theta;
 }
 
-static inline void inv_park_transform(float d, float q, float angle_rad, float *alpha, float *beta) {
+static inline void inv_park_transform(float d, float q, float angle_rad, float *alpha, float *beta)
+{
     float cos_theta = _cos(angle_rad);
     float sin_theta = _sin(angle_rad);
     *alpha = d * cos_theta - q * sin_theta;
     *beta = d * sin_theta + q * cos_theta;
 }
 
-static inline void clarke_transform(float Ia, float Ib, float Ic, float *alpha, float *beta) {
-    if (Ic == 0) {
+static inline void clarke_transform(float Ia, float Ib, float Ic, float *alpha, float *beta)
+{
+    if (Ic == 0)
+    {
         *alpha = Ia;
         *beta = (Ia + 2.0f * Ib) * _1_SQRT3;
-    } else {
+    }
+    else
+    {
         *alpha = (2.0f * Ia - Ib - Ic) * (1.0f / 3.0f);
         *beta = (Ib - Ic) * _1_SQRT3 * (1.0f / 3.0f);
     }
