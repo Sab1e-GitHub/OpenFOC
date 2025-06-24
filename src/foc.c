@@ -8,29 +8,6 @@
 #include "foc.h"
 
 
-#define DEFALUT_POSITION_PID_KP 100
-#define DEFALUT_POSITION_PID_KI 0.01f
-#define DEFALUT_POSITION_PID_KD 0.1f
-#define DEFALUT_POSITIOM_PID_OUT_MAX 6
-
-#define DEFALUT_SPEED_PID_KP 0.02f
-#define DEFALUT_SPEED_PID_KI 0.1f
-#define DEFALUT_SPEED_PID_KD 0.0f
-#define DEFALUT_SPEED_PID_OUT_MAX 20.0f
-
-#define DEFALUT_IQ_PID_KP 1.2f
-#define DEFALUT_IQ_PID_KI 3.5f
-#define DEFALUT_IQ_PID_KD 0.0f
-#define DEFALUT_IQ_PID_OUT_MAX 2
-
-#define DEFALUT_ID_PID_KP 0.2f
-#define DEFALUT_ID_PID_KI 0.2f
-#define DEFALUT_ID_PID_KD 0.0f
-#define DEFALUT_ID_PID_OUT_MAX 6
-
-#define DEFAULT_IQ_LPF_TS 0.2f
-#define DEFAULT_ID_LPF_TS 0.2f
-#define DEFAULT_SPEED_LPF_TS 0.02f
 
 void foc_set_phase(FOC_Instance *foc, Motor_Phase ch1, Motor_Phase ch2,
                    Motor_Phase ch3)
@@ -50,24 +27,24 @@ void foc_init(FOC_Instance *foc, const FOC_InitConfig *config)
 
     FOC_Config_TypeDef *cfg = &foc->cfg;
 
-    // ========== 模式与参数 ==========
+    /* ------------ 模式与参数 ------------ */
     cfg->mode = config->mode;
     cfg->mode_params = config->mode_params;
 
-    // ========== 电机参数 ==========
+    /* ------------ 电机参数 ------------ */
     cfg->pole_pairs = config->pole_pairs;
     cfg->pwm_period = config->pwm_period;
     cfg->v_dc = config->v_dc;
 
-    // ========== 对齐参数 ==========
+    /* ------------ 对齐参数 ------------ */
     cfg->align_voltage = (config->align_voltage > 0.0f) ? config->align_voltage : 2.5f;
     cfg->align_time_ms = (config->align_time_ms > 0.0f) ? config->align_time_ms : 1000.0f;
     cfg->alignment_angle = (config->alignment_angle > 0.0f) ? config->alignment_angle : (3.0f * _PI / 2.0f);
 
-    // ========== 传感器方向 ==========
+    /* ------------ 传感器方向 ------------ */
     cfg->angle_sensor_direction = config->angle_sensor_direction;
 
-    // ========== 回调函数 ==========
+    /* ------------ 回调函数 ------------ */
     cfg->callbacks.set_pwm = config->set_pwm;
     cfg->callbacks.read_mode = config->read_mode;
     cfg->callbacks.read_angle = config->read_angle;
@@ -81,7 +58,7 @@ void foc_init(FOC_Instance *foc, const FOC_InitConfig *config)
     }
     cfg->get_micros = config->get_micros;
 
-    // ========== 相序设置 ==========
+    /* ------------ 相序设置 ------------ */
     if (config->phase_ch1 == FOC_PHASE_UNKNOWN ||
         config->phase_ch2 == FOC_PHASE_UNKNOWN ||
         config->phase_ch3 == FOC_PHASE_UNKNOWN)
@@ -93,7 +70,7 @@ void foc_init(FOC_Instance *foc, const FOC_InitConfig *config)
         foc_set_phase(foc, config->phase_ch1, config->phase_ch2, config->phase_ch3);
     }
 
-    // ========== 零电角校准 ==========
+    /* ------------ 零电角设置 ------------ */
     if (config->zero_electric_angle != 0.0f)
     {
         cfg->zero_electric_angle = config->zero_electric_angle;
@@ -103,41 +80,124 @@ void foc_init(FOC_Instance *foc, const FOC_InitConfig *config)
         foc_calibrate_zero_electric_angle(foc);
     }
 
-    // ========== PID 默认初始化 ==========
-    pid_init(&cfg->speed_pid_controller,
-             DEFALUT_SPEED_PID_KP,
-             DEFALUT_SPEED_PID_KI,
-             DEFALUT_SPEED_PID_KD,
-             -DEFALUT_SPEED_PID_OUT_MAX,
-             DEFALUT_SPEED_PID_OUT_MAX, config->get_micros);
+    /* ------------ PID 初始化 ------------ */
+    switch (config->mode) {
+    case FOC_Mode_Current_Control:
+        pid_init(&cfg->iq_pid_controller,
+                 config->mode_params.current.iq_pid.kp,
+                 config->mode_params.current.iq_pid.ki,
+                 config->mode_params.current.iq_pid.kd,
+                 -config->mode_params.current.iq_pid.out_max,
+                 config->mode_params.current.iq_pid.out_max,
+                 config->get_micros);
+        pid_init(&cfg->id_pid_controller,
+                 config->mode_params.current.id_pid.kp,
+                 config->mode_params.current.id_pid.ki,
+                 config->mode_params.current.id_pid.kd,
+                 -config->mode_params.current.id_pid.out_max,
+                 config->mode_params.current.id_pid.out_max,
+                 config->get_micros);
+        break;
+    case FOC_Mode_Velocity_Closedloop:
+        pid_init(&cfg->speed_pid_controller,
+                 config->mode_params.vel_closed.speed_pid.kp,
+                 config->mode_params.vel_closed.speed_pid.ki,
+                 config->mode_params.vel_closed.speed_pid.kd,
+                 -config->mode_params.vel_closed.speed_pid.out_max,
+                 config->mode_params.vel_closed.speed_pid.out_max,
+                 config->get_micros);
+        pid_init(&cfg->iq_pid_controller,
+                 config->mode_params.vel_closed.iq_pid.kp,
+                 config->mode_params.vel_closed.iq_pid.ki,
+                 config->mode_params.vel_closed.iq_pid.kd,
+                 -config->mode_params.vel_closed.iq_pid.out_max,
+                 config->mode_params.vel_closed.iq_pid.out_max,
+                 config->get_micros);
+        pid_init(&cfg->id_pid_controller,
+                 config->mode_params.vel_closed.id_pid.kp,
+                 config->mode_params.vel_closed.id_pid.ki,
+                 config->mode_params.vel_closed.id_pid.kd,
+                 -config->mode_params.vel_closed.id_pid.out_max,
+                 config->mode_params.vel_closed.id_pid.out_max,
+                 config->get_micros);
+        break;
+    case FOC_Mode_Angle_Closedloop:
+        pid_init(&cfg->position_pid_controller,
+                 config->mode_params.angle_closed.position_pid.kp,
+                 config->mode_params.angle_closed.position_pid.ki,
+                 config->mode_params.angle_closed.position_pid.kd,
+                 -config->mode_params.angle_closed.position_pid.out_max,
+                 config->mode_params.angle_closed.position_pid.out_max,
+                 config->get_micros);
+        pid_init(&cfg->speed_pid_controller,
+                 config->mode_params.angle_closed.speed_pid.kp,
+                 config->mode_params.angle_closed.speed_pid.ki,
+                 config->mode_params.angle_closed.speed_pid.kd,
+                 -config->mode_params.angle_closed.speed_pid.out_max,
+                 config->mode_params.angle_closed.speed_pid.out_max,
+                 config->get_micros);
+        pid_init(&cfg->iq_pid_controller,
+                 config->mode_params.angle_closed.iq_pid.kp,
+                 config->mode_params.angle_closed.iq_pid.ki,
+                 config->mode_params.angle_closed.iq_pid.kd,
+                 -config->mode_params.angle_closed.iq_pid.out_max,
+                 config->mode_params.angle_closed.iq_pid.out_max,
+                 config->get_micros);
+        pid_init(&cfg->id_pid_controller,
+                 config->mode_params.angle_closed.id_pid.kp,
+                 config->mode_params.angle_closed.id_pid.ki,
+                 config->mode_params.angle_closed.id_pid.kd,
+                 -config->mode_params.angle_closed.id_pid.out_max,
+                 config->mode_params.angle_closed.id_pid.out_max,
+                 config->get_micros);
+        break;
+    default:
+        // openloop等模式无需PID
+        break;
+    }
 
-    pid_init(&cfg->iq_pid_controller,
-             DEFALUT_IQ_PID_KP,
-             DEFALUT_IQ_PID_KI,
-             DEFALUT_IQ_PID_KD,
-             -DEFALUT_IQ_PID_OUT_MAX,
-             DEFALUT_IQ_PID_OUT_MAX, config->get_micros);
+    /* ------------ 低通滤波器初始化 ------------ */
+    float lpf_speed_ts = 0.01f; // 默认值，可根据需要调整
 
-    pid_init(&cfg->id_pid_controller,
-             DEFALUT_ID_PID_KP,
-             DEFALUT_ID_PID_KI,
-             DEFALUT_ID_PID_KD,
-             -DEFALUT_ID_PID_OUT_MAX,
-             DEFALUT_ID_PID_OUT_MAX, config->get_micros);
+    switch (config->mode) {
+    case FOC_Mode_Current_Control:
+        if (config->mode_params.current.lpf_speed_ts > 0)
+            lpf_speed_ts = config->mode_params.current.lpf_speed_ts;
+        break;
+    case FOC_Mode_Velocity_Closedloop:
+        if (config->mode_params.vel_closed.lpf_speed_ts > 0)
+            lpf_speed_ts = config->mode_params.vel_closed.lpf_speed_ts;
+        lowpass_filter_init(&cfg->lpf_iq,
+            config->mode_params.vel_closed.lpf_iq_ts,
+            config->get_micros);
+        lowpass_filter_init(&cfg->lpf_id,
+            config->mode_params.vel_closed.lpf_id_ts,
+            config->get_micros);
+        break;
+    case FOC_Mode_Angle_Closedloop:
+        if (config->mode_params.angle_closed.lpf_speed_ts > 0)
+            lpf_speed_ts = config->mode_params.angle_closed.lpf_speed_ts;
+        lowpass_filter_init(&cfg->lpf_iq,
+            config->mode_params.angle_closed.lpf_iq_ts,
+            config->get_micros);
+        lowpass_filter_init(&cfg->lpf_id,
+            config->mode_params.angle_closed.lpf_id_ts,
+            config->get_micros);
+        break;
+    case FOC_Mode_Velocity_Openloop:
+        if (config->mode_params.vel_open.lpf_speed_ts > 0)
+            lpf_speed_ts = config->mode_params.vel_open.lpf_speed_ts;
+        break;
+    case FOC_Mode_Angle_Openloop:
+        if (config->mode_params.angle_open.lpf_speed_ts > 0)
+            lpf_speed_ts = config->mode_params.angle_open.lpf_speed_ts;
+        break;
+    default:
+        break;
+    }
+    lowpass_filter_init(&cfg->lpf_speed, lpf_speed_ts, config->get_micros);
 
-    pid_init(&cfg->position_pid_controller,
-             DEFALUT_POSITION_PID_KP,
-             DEFALUT_POSITION_PID_KI,
-             DEFALUT_POSITION_PID_KD,
-             -DEFALUT_POSITIOM_PID_OUT_MAX,
-             DEFALUT_POSITIOM_PID_OUT_MAX, config->get_micros);
-
-    // ========== 低通滤波器初始化 ==========
-    lowpass_filter_init(&cfg->lpf_iq, DEFAULT_IQ_LPF_TS, config->get_micros);
-    lowpass_filter_init(&cfg->lpf_id, DEFAULT_ID_LPF_TS, config->get_micros);
-    lowpass_filter_init(&cfg->lpf_speed, DEFAULT_SPEED_LPF_TS, config->get_micros);
-
-    // ========== 状态清零 ==========
+    /* ------------ 状态清零 ------------ */
     memset(&foc->state, 0, sizeof(FOC_State_TypeDef));
 }
 
@@ -357,12 +417,26 @@ FOC_Status foc_auto_detect_phase_order(FOC_Instance *user_foc)
         foc.cfg.mode = FOC_Mode_Velocity_Closedloop;
         foc.cfg.mode_params.vel_closed.target_speed_rad_per_sec = 2.0f;
         pid_init(&foc.cfg.speed_pid_controller,
-                 DEFALUT_SPEED_PID_KP, DEFALUT_SPEED_PID_KI, DEFALUT_SPEED_PID_KD,
-                 -DEFALUT_SPEED_PID_OUT_MAX, DEFALUT_SPEED_PID_OUT_MAX,foc.cfg.get_micros);
-        pid_init(&foc.cfg.iq_pid_controller, DEFALUT_IQ_PID_KP, DEFALUT_IQ_PID_KI, DEFALUT_IQ_PID_KD,
-                 -DEFALUT_IQ_PID_OUT_MAX, DEFALUT_IQ_PID_OUT_MAX,foc.cfg.get_micros);
-        pid_init(&foc.cfg.id_pid_controller, DEFALUT_ID_PID_KP, DEFALUT_ID_PID_KI, DEFALUT_ID_PID_KD,
-                 -DEFALUT_ID_PID_OUT_MAX, DEFALUT_ID_PID_OUT_MAX,foc.cfg.get_micros);
+         user_foc->cfg.mode_params.vel_closed.speed_pid.kp,
+         user_foc->cfg.mode_params.vel_closed.speed_pid.ki,
+         user_foc->cfg.mode_params.vel_closed.speed_pid.kd,
+         -user_foc->cfg.mode_params.vel_closed.speed_pid.out_max,
+         user_foc->cfg.mode_params.vel_closed.speed_pid.out_max,
+         foc.cfg.get_micros);
+pid_init(&foc.cfg.iq_pid_controller,
+         user_foc->cfg.mode_params.vel_closed.iq_pid.kp,
+         user_foc->cfg.mode_params.vel_closed.iq_pid.ki,
+         user_foc->cfg.mode_params.vel_closed.iq_pid.kd,
+         -user_foc->cfg.mode_params.vel_closed.iq_pid.out_max,
+         user_foc->cfg.mode_params.vel_closed.iq_pid.out_max,
+         foc.cfg.get_micros);
+pid_init(&foc.cfg.id_pid_controller,
+         user_foc->cfg.mode_params.vel_closed.id_pid.kp,
+         user_foc->cfg.mode_params.vel_closed.id_pid.ki,
+         user_foc->cfg.mode_params.vel_closed.id_pid.kd,
+         -user_foc->cfg.mode_params.vel_closed.id_pid.out_max,
+         user_foc->cfg.mode_params.vel_closed.id_pid.out_max,
+         foc.cfg.get_micros);
 
         float current_sum = 0.0f;
         for (int j = 0; j < 200; j++)
@@ -502,10 +576,11 @@ void foc_run(FOC_Instance *foc)
         foc->state.id = cfg->mode_params.current.target_id;
         break;
     default:
+        // 不可能进入这里
         return;
     }
 
-    if (cfg->mode >= FOC_Mode_Velocity_Closedloop)
+    if (cfg->mode == FOC_Mode_Velocity_Closedloop || cfg->mode == FOC_Mode_Angle_Closedloop)
     {
         foc_read_corrected_currents(foc);
         clarke_transform(foc->state.ia, foc->state.ib, foc->state.ic,

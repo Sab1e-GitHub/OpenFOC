@@ -76,37 +76,57 @@ typedef struct
 } FOC_PhaseCorrectionMap;
 
 /* ---------- 模式参数结构体 ---------- */
-typedef struct
-{
+typedef struct {
+    float kp, ki, kd, out_max;
+} PIDConfig;
+
+typedef struct {
     float target_id;
     float target_iq;
+    PIDConfig iq_pid;
+    PIDConfig id_pid;
+    float lpf_speed_ts;   // 速度低通滤波器时间常数
 } FOC_CurrentControlParams;
 
-typedef struct
-{
+/* ---------- 速度闭环模式参数 ---------- */
+typedef struct {
     float target_speed_rad_per_sec;
+    PIDConfig speed_pid;
+    PIDConfig iq_pid;
+    PIDConfig id_pid;
+    float lpf_speed_ts;   // 速度低通滤波器时间常数
+    float lpf_iq_ts;
+    float lpf_id_ts;
 } FOC_VelocityClosedloopParams;
 
-typedef struct
-{
+/* ---------- 角度闭环模式参数 ---------- */
+typedef struct {
     float target_position_deg;
     float angle_closedloop_kv;
+    PIDConfig position_pid;
+    PIDConfig speed_pid;
+    PIDConfig iq_pid;
+    PIDConfig id_pid;
+    float lpf_speed_ts;   // 速度低通滤波器时间常数
+    float lpf_iq_ts;
+    float lpf_id_ts;
 } FOC_AngleClosedloopParams;
 
-typedef struct
-{
+/* ---------- 开环角度模式参数 ---------- */
+typedef struct {
     float target_speed_rad_per_sec;
     float uq_openloop;
+    float lpf_speed_ts;   // 速度低通滤波器时间常数
 } FOC_VelocityOpenloopParams;
 
-typedef struct
-{
+typedef struct {
     float target_position_deg;
     float uq_openloop;
+    float lpf_speed_ts;   // 速度低通滤波器时间常数
 } FOC_AngleOpenloopParams;
 
-typedef union
-{
+// 联合体
+typedef union {
     FOC_CurrentControlParams current;
     FOC_VelocityClosedloopParams vel_closed;
     FOC_AngleClosedloopParams angle_closed;
@@ -210,6 +230,27 @@ typedef struct
     float align_voltage;
     float align_time_ms;
     float alignment_angle;
+
+    // PID参数
+    float speed_pid_kp;
+    float speed_pid_ki;
+    float speed_pid_kd;
+    float speed_pid_out_max;
+
+    float iq_pid_kp;
+    float iq_pid_ki;
+    float iq_pid_kd;
+    float iq_pid_out_max;
+
+    float id_pid_kp;
+    float id_pid_ki;
+    float id_pid_kd;
+    float id_pid_out_max;
+
+    float position_pid_kp;
+    float position_pid_ki;
+    float position_pid_kd;
+    float position_pid_out_max;
 } FOC_InitConfig;
 
 static inline void speed_calculate(FOC_Instance *foc)
