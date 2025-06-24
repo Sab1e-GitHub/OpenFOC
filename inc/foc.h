@@ -23,8 +23,7 @@ typedef enum
 {
     FOC_PHASE_A = 0,
     FOC_PHASE_B = 1,
-    FOC_PHASE_C = 2,
-    FOC_PHASE_UNKNOWN = 255
+    FOC_PHASE_C = 2
 } Motor_Phase;
 
 typedef enum
@@ -86,6 +85,8 @@ typedef struct {
     PIDConfig iq_pid;
     PIDConfig id_pid;
     float lpf_speed_ts;   // 速度低通滤波器时间常数
+    float lpf_iq_ts;      // iq电流低通滤波器时间常数
+    float lpf_id_ts;      // id电流低通滤波器时间常数
 } FOC_CurrentControlParams;
 
 /* ---------- 速度闭环模式参数 ---------- */
@@ -231,26 +232,6 @@ typedef struct
     float align_time_ms;
     float alignment_angle;
 
-    // PID参数
-    float speed_pid_kp;
-    float speed_pid_ki;
-    float speed_pid_kd;
-    float speed_pid_out_max;
-
-    float iq_pid_kp;
-    float iq_pid_ki;
-    float iq_pid_kd;
-    float iq_pid_out_max;
-
-    float id_pid_kp;
-    float id_pid_ki;
-    float id_pid_kd;
-    float id_pid_out_max;
-
-    float position_pid_kp;
-    float position_pid_ki;
-    float position_pid_kd;
-    float position_pid_out_max;
 } FOC_InitConfig;
 
 static inline void speed_calculate(FOC_Instance *foc)
@@ -287,7 +268,6 @@ static inline void speed_calculate(FOC_Instance *foc)
 /* ---------- 公共函数接口 ---------- */
 void foc_init(FOC_Instance *foc, const FOC_InitConfig *config);
 void foc_run(FOC_Instance *foc);
-FOC_Status foc_auto_detect_phase_order(FOC_Instance *foc);
 void foc_set_phase(FOC_Instance *foc, Motor_Phase ch1, Motor_Phase ch2, Motor_Phase ch3);
 void foc_calibrate_zero_electric_angle(FOC_Instance *foc);
 

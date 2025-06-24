@@ -59,16 +59,7 @@ void foc_init(FOC_Instance *foc, const FOC_InitConfig *config)
     cfg->get_micros = config->get_micros;
 
     /* ------------ 相序设置 ------------ */
-    if (config->phase_ch1 == FOC_PHASE_UNKNOWN ||
-        config->phase_ch2 == FOC_PHASE_UNKNOWN ||
-        config->phase_ch3 == FOC_PHASE_UNKNOWN)
-    {
-        foc_auto_detect_phase_order(foc);
-    }
-    else
-    {
-        foc_set_phase(foc, config->phase_ch1, config->phase_ch2, config->phase_ch3);
-    }
+    foc_set_phase(foc, config->phase_ch1, config->phase_ch2, config->phase_ch3);
 
     /* ------------ 零电角设置 ------------ */
     if (config->zero_electric_angle != 0.0f)
@@ -163,6 +154,12 @@ void foc_init(FOC_Instance *foc, const FOC_InitConfig *config)
     case FOC_Mode_Current_Control:
         if (config->mode_params.current.lpf_speed_ts > 0)
             lpf_speed_ts = config->mode_params.current.lpf_speed_ts;
+		lowpass_filter_init(&cfg->lpf_iq,
+				config->mode_params.current.lpf_iq_ts,
+				config->get_micros);
+		lowpass_filter_init(&cfg->lpf_id,
+			config->mode_params.current.lpf_id_ts,
+			config->get_micros);
         break;
     case FOC_Mode_Velocity_Closedloop:
         if (config->mode_params.vel_closed.lpf_speed_ts > 0)
@@ -360,121 +357,6 @@ float unwrap_angle(float new_angle_rad, FOC_State_TypeDef *state)
     return state->last_unwrapped_angle_rad;
 }
 
-FOC_Status foc_auto_detect_phase_order(FOC_Instance *user_foc)
-{
-    printf("Phase order auto-detection started...\r\n");
-
-    Motor_Phase phase_orders[6][3] = {
-        {FOC_PHASE_A, FOC_PHASE_B, FOC_PHASE_C},
-        {FOC_PHASE_A, FOC_PHASE_C, FOC_PHASE_B},
-        {FOC_PHASE_B, FOC_PHASE_A, FOC_PHASE_C},
-        {FOC_PHASE_B, FOC_PHASE_C, FOC_PHASE_A},
-        {FOC_PHASE_C, FOC_PHASE_A, FOC_PHASE_B},
-        {FOC_PHASE_C, FOC_PHASE_B, FOC_PHASE_A}};
-    const char *phase_names[6] = {"ABC", "ACB", "BAC", "BCA", "CAB", "CBA"};
-
-    float best_score = -1.0f;
-    int best_index = -1;
-
-    for (int i = 0; i < 6; i++)
-    {
-        printf("Testing order: %s\r\n", phase_names[i]);
-
-        FOC_Instance foc = *user_foc;
-        foc_set_phase(&foc, phase_orders[i][0], phase_orders[i][1], phase_orders[i][2]);
-
-        foc.cfg.mode = FOC_Mode_Velocity_Openloop;
-        foc.cfg.zero_electric_angle = 0.0f;
-        foc.cfg.mode_params.vel_open.uq_openloop = 1.5f;
-        foc.cfg.mode_params.vel_open.target_speed_rad_per_sec = 1.0f;
-
-        foc_calibrate_zero_electric_angle(&foc);
-
-        // 步骤一：检测旋转方向
-        float angle_start = unwrap_angle(foc.cfg.angle_sensor_direction * foc.cfg.callbacks.read_angle(), &foc.state);
-        float angle_last = angle_start;
-        float delta_angle_sum = 0.0f;
-
-        for (int j = 0; j < 300; j++)
-        {
-            foc_run(&foc);
-            foc_delay_ms(foc.cfg.get_micros, 1);
-            float angle_now = unwrap_angle(foc.cfg.angle_sensor_direction * foc.cfg.callbacks.read_angle(), &foc.state);
-            delta_angle_sum += angle_now - angle_last;
-            angle_last = angle_now;
-        }
-
-        bool is_forward = (delta_angle_sum > 0.2f);
-        printf(" -> Net=%.2f rad, Dir=%s\r\n", delta_angle_sum, is_forward ? "FWD" : "REV");
-
-        if (!is_forward)
-        {
-            printf(" -> Skipped: reverse direction.\r\n");
-            continue;
-        }
-
-        // 步骤二：速度闭环电流幅值评分
-        foc.cfg.mode = FOC_Mode_Velocity_Closedloop;
-        foc.cfg.mode_params.vel_closed.target_speed_rad_per_sec = 2.0f;
-        pid_init(&foc.cfg.speed_pid_controller,
-         user_foc->cfg.mode_params.vel_closed.speed_pid.kp,
-         user_foc->cfg.mode_params.vel_closed.speed_pid.ki,
-         user_foc->cfg.mode_params.vel_closed.speed_pid.kd,
-         -user_foc->cfg.mode_params.vel_closed.speed_pid.out_max,
-         user_foc->cfg.mode_params.vel_closed.speed_pid.out_max,
-         foc.cfg.get_micros);
-pid_init(&foc.cfg.iq_pid_controller,
-         user_foc->cfg.mode_params.vel_closed.iq_pid.kp,
-         user_foc->cfg.mode_params.vel_closed.iq_pid.ki,
-         user_foc->cfg.mode_params.vel_closed.iq_pid.kd,
-         -user_foc->cfg.mode_params.vel_closed.iq_pid.out_max,
-         user_foc->cfg.mode_params.vel_closed.iq_pid.out_max,
-         foc.cfg.get_micros);
-pid_init(&foc.cfg.id_pid_controller,
-         user_foc->cfg.mode_params.vel_closed.id_pid.kp,
-         user_foc->cfg.mode_params.vel_closed.id_pid.ki,
-         user_foc->cfg.mode_params.vel_closed.id_pid.kd,
-         -user_foc->cfg.mode_params.vel_closed.id_pid.out_max,
-         user_foc->cfg.mode_params.vel_closed.id_pid.out_max,
-         foc.cfg.get_micros);
-
-        float current_sum = 0.0f;
-        for (int j = 0; j < 200; j++)
-        {
-            foc_run(&foc);
-            foc_delay_ms(foc.cfg.get_micros, 1);
-            float i_mag = fabsf(foc.state.ia) + fabsf(foc.state.ib) + fabsf(foc.state.ic);
-            current_sum += i_mag;
-        }
-
-        float current_avg = current_sum / 200.0f;
-        float score = 1.0f / (current_avg + 0.01f);
-
-        printf(" -> I_avg=%.2f A, Score=%.2f\r\n", current_avg, score);
-
-        if (score > best_score)
-        {
-            best_score = score;
-            best_index = i;
-        }
-    }
-
-    if (best_index >= 0)
-    {
-        foc_set_phase(user_foc,
-                      phase_orders[best_index][0],
-                      phase_orders[best_index][1],
-                      phase_orders[best_index][2]);
-        printf("Best order: %s (Score=%.2f)\r\n", phase_names[best_index], best_score);
-        return FOC_OK;
-    }
-    else
-    {
-        printf("Phase order detection failed!\r\n");
-        return FOC_ERR;
-    }
-}
-
 void foc_calibrate_zero_electric_angle(FOC_Instance *foc)
 {
     // Step 1: 施加 Ud 电压，Uq = 0，让转子对齐
@@ -580,7 +462,7 @@ void foc_run(FOC_Instance *foc)
         return;
     }
 
-    if (cfg->mode == FOC_Mode_Velocity_Closedloop || cfg->mode == FOC_Mode_Angle_Closedloop)
+    if (cfg->mode == FOC_Mode_Velocity_Closedloop || cfg->mode == FOC_Mode_Angle_Closedloop || cfg->mode == FOC_Mode_Current_Control)
     {
         foc_read_corrected_currents(foc);
         clarke_transform(foc->state.ia, foc->state.ib, foc->state.ic,

@@ -61,6 +61,15 @@
 #define DEFAULT_IQ_LPF_TS 0.2f
 #define DEFAULT_ID_LPF_TS 0.2f
 #define DEFAULT_SPEED_LPF_TS 0.02f
+
+#define FOC_MODE_ANGLE_OPENLOOP
+//#define FOC_MODE_ANGLE_CLOSEDLOOP
+//#define FOC_MODE_VELOCITY_OPENLOOP
+//#define FOC_MODE_VELOCITY_CLOSEDLOOP
+//#define FOC_MODE_CURRENT_CONTROL
+
+//#define PHASE_AUTO_DETECT
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -155,6 +164,123 @@ void read_currents(float *i1,float *i2){
 	ina181ax_read_current(&ina181ax_m1_ch2, &i2_raw);
 	*i2 = -i2_raw;
 }
+
+// 相序检测函数，不准确，尚不可用
+//FOC_Status foc_auto_detect_phase_order(FOC_Instance *user_foc)
+//{
+//    printf("Phase order auto-detection started...\r\n");
+//
+//    Motor_Phase phase_orders[6][3] = {
+//        {FOC_PHASE_A, FOC_PHASE_B, FOC_PHASE_C},
+//        {FOC_PHASE_A, FOC_PHASE_C, FOC_PHASE_B},
+//        {FOC_PHASE_B, FOC_PHASE_A, FOC_PHASE_C},
+//        {FOC_PHASE_B, FOC_PHASE_C, FOC_PHASE_A},
+//        {FOC_PHASE_C, FOC_PHASE_A, FOC_PHASE_B},
+//        {FOC_PHASE_C, FOC_PHASE_B, FOC_PHASE_A}};
+//    const char *phase_names[6] = {"ABC", "ACB", "BAC", "BCA", "CAB", "CBA"};
+//
+//    float best_score = -1.0f;
+//    int best_index = -1;
+//
+//    for (int i = 0; i < 6; i++)
+//    {
+//        printf("Testing order: %s\r\n", phase_names[i]);
+//
+//        FOC_Instance foc = *user_foc;
+//        foc_set_phase(&foc, phase_orders[i][0], phase_orders[i][1], phase_orders[i][2]);
+//
+//        foc.cfg.mode = FOC_Mode_Velocity_Openloop;
+//        foc.cfg.zero_electric_angle = 0.0f;
+//        foc.cfg.mode_params.vel_open.uq_openloop = 1.5f;
+//        foc.cfg.mode_params.vel_open.target_speed_rad_per_sec = 1.0f;
+//
+//        foc_calibrate_zero_electric_angle(&foc);
+//
+//        // 步骤一：检测旋转方向
+//        float angle_start = unwrap_angle(foc.cfg.angle_sensor_direction * foc.cfg.callbacks.read_angle(), &foc.state);
+//        float angle_last = angle_start;
+//        float delta_angle_sum = 0.0f;
+//
+//        for (int j = 0; j < 300; j++)
+//        {
+//            foc_run(&foc);
+//            foc_delay_ms(foc.cfg.get_micros, 1);
+//            float angle_now = unwrap_angle(foc.cfg.angle_sensor_direction * foc.cfg.callbacks.read_angle(), &foc.state);
+//            delta_angle_sum += angle_now - angle_last;
+//            angle_last = angle_now;
+//        }
+//
+//        bool is_forward = (delta_angle_sum > 0.2f);
+//        printf(" -> Net=%.2f rad, Dir=%s\r\n", delta_angle_sum, is_forward ? "FWD" : "REV");
+//
+//        if (!is_forward)
+//        {
+//            printf(" -> Skipped: reverse direction.\r\n");
+//            continue;
+//        }
+//
+//        // 步骤二：速度闭环电流幅值评分
+//        foc.cfg.mode = FOC_Mode_Velocity_Closedloop;
+//        foc.cfg.mode_params.vel_closed.target_speed_rad_per_sec = 2.0f;
+//        pid_init(&foc.cfg.speed_pid_controller,
+//         user_foc->cfg.mode_params.vel_closed.speed_pid.kp,
+//         user_foc->cfg.mode_params.vel_closed.speed_pid.ki,
+//         user_foc->cfg.mode_params.vel_closed.speed_pid.kd,
+//         -user_foc->cfg.mode_params.vel_closed.speed_pid.out_max,
+//         user_foc->cfg.mode_params.vel_closed.speed_pid.out_max,
+//         foc.cfg.get_micros);
+//pid_init(&foc.cfg.iq_pid_controller,
+//         user_foc->cfg.mode_params.vel_closed.iq_pid.kp,
+//         user_foc->cfg.mode_params.vel_closed.iq_pid.ki,
+//         user_foc->cfg.mode_params.vel_closed.iq_pid.kd,
+//         -user_foc->cfg.mode_params.vel_closed.iq_pid.out_max,
+//         user_foc->cfg.mode_params.vel_closed.iq_pid.out_max,
+//         foc.cfg.get_micros);
+//pid_init(&foc.cfg.id_pid_controller,
+//         user_foc->cfg.mode_params.vel_closed.id_pid.kp,
+//         user_foc->cfg.mode_params.vel_closed.id_pid.ki,
+//         user_foc->cfg.mode_params.vel_closed.id_pid.kd,
+//         -user_foc->cfg.mode_params.vel_closed.id_pid.out_max,
+//         user_foc->cfg.mode_params.vel_closed.id_pid.out_max,
+//         foc.cfg.get_micros);
+//
+//        float current_sum = 0.0f;
+//        for (int j = 0; j < 200; j++)
+//        {
+//            foc_run(&foc);
+//            foc_delay_ms(foc.cfg.get_micros, 1);
+//            float i_mag = fabsf(foc.state.ia) + fabsf(foc.state.ib) + fabsf(foc.state.ic);
+//            current_sum += i_mag;
+//        }
+//
+//        float current_avg = current_sum / 200.0f;
+//        float score = 1.0f / (current_avg + 0.01f);
+//
+//        printf(" -> I_avg=%.2f A, Score=%.2f\r\n", current_avg, score);
+//
+//        if (score > best_score)
+//        {
+//            best_score = score;
+//            best_index = i;
+//        }
+//    }
+//
+//    if (best_index >= 0)
+//    {
+//        foc_set_phase(user_foc,
+//                      phase_orders[best_index][0],
+//                      phase_orders[best_index][1],
+//                      phase_orders[best_index][2]);
+//        printf("Best order: %s (Score=%.2f)\r\n", phase_names[best_index], best_score);
+//        return FOC_OK;
+//    }
+//    else
+//    {
+//        printf("Phase order detection failed!\r\n");
+//        return FOC_ERR;
+//    }
+//}
+
 void main_init(){
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
@@ -178,9 +304,6 @@ void main_init(){
 
 	FOC_InitConfig init_cfg={0};
 	init_cfg.angle_sensor_direction = FOC_Direction_CW;
-	init_cfg.mode = FOC_Mode_Angle_Closedloop;
-	init_cfg.mode_params.angle_closed.angle_closedloop_kv = 0.1f;
-	init_cfg.mode_params.angle_closed.target_position_deg = 30;
 	init_cfg.phase_ch1 = FOC_PHASE_A;
 	init_cfg.phase_ch2 = FOC_PHASE_B;
 	init_cfg.phase_ch3 = FOC_PHASE_C;
@@ -194,6 +317,18 @@ void main_init(){
 	init_cfg.v_dc = 12.0f;
 
 	init_cfg.get_micros = micros64;
+
+
+#ifdef FOC_MODE_ANGLE_OPENLOOP
+
+	init_cfg.mode = FOC_Mode_Angle_Openloop;
+	init_cfg.mode_params.angle_open.uq_openloop = 1.5f;
+
+#elif defined(FOC_MODE_ANGLE_CLOSEDLOOP)
+
+	init_cfg.mode = FOC_Mode_Angle_Closedloop;
+	init_cfg.mode_params.angle_closed.target_position_deg = 0.0f;
+	init_cfg.mode_params.angle_closed.angle_closedloop_kv = 0.1f;
 
 	init_cfg.mode_params.angle_closed.position_pid.kp = DEFALUT_POSITION_PID_KP;
 	init_cfg.mode_params.angle_closed.position_pid.ki = DEFALUT_POSITION_PID_KI;
@@ -215,12 +350,58 @@ void main_init(){
 	init_cfg.mode_params.angle_closed.id_pid.kd = DEFALUT_ID_PID_KD;
 	init_cfg.mode_params.angle_closed.id_pid.out_max = DEFALUT_ID_PID_OUT_MAX;
 
-	init_cfg.mode_params.angle_closed.lpf_speed_ts = DEFAULT_SPEED_LPF_TS;
+
 	init_cfg.mode_params.angle_closed.lpf_iq_ts = DEFAULT_IQ_LPF_TS;
 	init_cfg.mode_params.angle_closed.lpf_id_ts = DEFAULT_ID_LPF_TS;
 
+#elif defined(FOC_MODE_VELOCITY_OPENLOOP)
+	init_cfg.mode = FOC_Mode_Velocity_Openloop;
+	init_cfg.mode_params.vel_open.uq_openloop = 3.0f;
+	init_cfg.mode_params.vel_open.target_speed_rad_per_sec = 50.0f;
+#elif defined(FOC_MODE_VELOCITY_CLOSEDLOOP)
+	init_cfg.mode = FOC_Mode_Velocity_Closedloop;
+	init_cfg.mode_params.vel_closed.target_speed_rad_per_sec = 50.0f;
+
+	init_cfg.mode_params.vel_closed.speed_pid.kp = DEFALUT_SPEED_PID_KP;
+	init_cfg.mode_params.vel_closed.speed_pid.ki = DEFALUT_SPEED_PID_KI;
+	init_cfg.mode_params.vel_closed.speed_pid.kd = DEFALUT_SPEED_PID_KD;
+	init_cfg.mode_params.vel_closed.speed_pid.out_max = DEFALUT_SPEED_PID_OUT_MAX;
+
+	init_cfg.mode_params.vel_closed.iq_pid.kp = DEFALUT_IQ_PID_KP;
+	init_cfg.mode_params.vel_closed.iq_pid.ki = DEFALUT_IQ_PID_KI;
+	init_cfg.mode_params.vel_closed.iq_pid.kd = DEFALUT_IQ_PID_KD;
+	init_cfg.mode_params.vel_closed.iq_pid.out_max = DEFALUT_IQ_PID_OUT_MAX;
+
+	init_cfg.mode_params.vel_closed.id_pid.kp = DEFALUT_ID_PID_KP;
+	init_cfg.mode_params.vel_closed.id_pid.ki = DEFALUT_ID_PID_KI;
+	init_cfg.mode_params.vel_closed.id_pid.kd = DEFALUT_ID_PID_KD;
+	init_cfg.mode_params.vel_closed.id_pid.out_max = DEFALUT_ID_PID_OUT_MAX;
+
+	init_cfg.mode_params.vel_closed.lpf_iq_ts = DEFAULT_IQ_LPF_TS;
+	init_cfg.mode_params.vel_closed.lpf_id_ts = DEFAULT_ID_LPF_TS;
+#elif defined(FOC_MODE_CURRENT_CONTROL)
+	init_cfg.mode = FOC_Mode_Current_Control;
+	init_cfg.mode_params.current.target_id = 0.0f;
+	init_cfg.mode_params.current.target_iq = 0.2f;
+
+	init_cfg.mode_params.current.iq_pid.kp = DEFALUT_IQ_PID_KP;
+	init_cfg.mode_params.current.iq_pid.ki = DEFALUT_IQ_PID_KI;
+	init_cfg.mode_params.current.iq_pid.kd = DEFALUT_IQ_PID_KD;
+	init_cfg.mode_params.current.iq_pid.out_max = DEFALUT_IQ_PID_OUT_MAX;
+
+	init_cfg.mode_params.current.id_pid.kp = DEFALUT_ID_PID_KP;
+	init_cfg.mode_params.current.id_pid.ki = DEFALUT_ID_PID_KI;
+	init_cfg.mode_params.current.id_pid.kd = DEFALUT_ID_PID_KD;
+	init_cfg.mode_params.current.id_pid.out_max = DEFALUT_ID_PID_OUT_MAX;
+#endif
+	init_cfg.mode_params.angle_open.lpf_speed_ts = DEFAULT_SPEED_LPF_TS;
+
+
 	foc_init(&foc, &init_cfg);
 
+#ifdef PHASE_AUTO_DETECT
+	foc_auto_detect_phase_order(&foc);
+#endif
 }
 /* USER CODE END 0 */
 
@@ -258,6 +439,8 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 	main_init();
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -266,7 +449,30 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-		foc_run(&foc);
+#ifdef FOC_MODE_ANGLE_OPENLOOP
+		static float target_angle = 0.0f;
+		target_angle += 0.5f;  // 每循环增加0.5度（调整此值改变速度）
+		if (target_angle >= 360.0f) target_angle = 0.0f;
+		foc.cfg.mode_params.angle_open.target_position_deg = target_angle;  // 更新目标角度
+		foc_run(&foc);                                // 运行FOC计算
+		HAL_Delay(10);                                // 控制更新速率
+#elif defined(FOC_MODE_ANGLE_CLOSEDLOOP)
+		static uint64_t count = 0;
+		count++;
+		if(count== 10000){
+			count = 0;
+			foc.cfg.mode_params.angle_closed.target_position_deg += 60.0f;
+			if(foc.cfg.mode_params.angle_closed.target_position_deg >= 360.0f)
+				foc.cfg.mode_params.angle_closed.target_position_deg = 0.0f;
+		}
+		foc_run(&foc);                                // 运行FOC计算
+#elif defined(FOC_MODE_VELOCITY_OPENLOOP)
+		foc_run(&foc);                                // 运行FOC计算
+#elif defined(FOC_MODE_VELOCITY_CLOSEDLOOP)
+		foc_run(&foc);                                // 运行FOC计算
+#elif defined(FOC_MODE_CURRENT_CONTROL)
+		foc_run(&foc);                                // 运行FOC计算
+#endif
 	}
   /* USER CODE END 3 */
 }
