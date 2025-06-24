@@ -62,6 +62,71 @@ while (1) {
     // 其它应用逻辑
 }
 ```
+
+### TimeBase
+> [!CAUTION]
+> OpenFOC 所有定时相关功能（如 PID、低通滤波器、速度计算等）都依赖于 get_micros 回调函数。
+> 你必须确保 get_micros 返回的是单调递增的、单位为微秒（us）的 64 位无符号时间戳。
+>
+> 不正确的实现（如返回毫秒、非单调递增、溢出等）会导致控制算法异常甚至失控。
+> 推荐直接调用 MCU 的高精度定时器或系统滴答定时器，并确保溢出处理正确。
+> 务必在移植和使用前充分验证 get_micros 的准确性和稳定性！
+
+示例：
+```
+/* ------基于STM32 HAL库------ */
+void dwt_init(void)
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; // 使能 DWT 模块
+    DWT->CYCCNT = 0;                                // 复位计数器
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;            // 启用 CYCCNT
+}
+uint64_t micros64(void)
+{
+    static uint32_t last_cycle = 0;
+    static uint64_t micros_accum = 0;
+
+    uint32_t current_cycle = DWT->CYCCNT;
+    uint32_t cycle_delta = current_cycle - last_cycle;
+    last_cycle = current_cycle;
+
+    micros_accum += (uint64_t)cycle_delta / (SystemCoreClock / 1000000UL);
+    return micros_accum;
+}
+
+dwt_init();
+
+config.get_micros = micros64;
+```
+
+### 角度传感器方向
+
+请自行判断角度传感器方向。
+
+ - 如果角度传感器顺时针增加，则设置为`FOC_Direction_CW`
+ - 如果角度传感器逆时针增加，则设置为`FOC_Direction_CCW`
+
+### 电机的相序
+
+相序检测函数必须基于正确角度传感器方向；
+如果相序不清楚，只需要设置某一相为：`FOC_PHASE_UNKNOWN`即可，上电后就会自动开始校准。
+
+> [!NOTE]
+> 此功能还在测试中，不确定是否能完美适配所有电机
+
+示例：
+```
+config.phase_ch1=FOC_PHASE_UNKNOWN;
+```
+
+### 电角度的校准
+
+如果电角度设置为0则会自动校准电角度。
+
+### 模式配置
+
+有多种模式可供配置，但是要注意使用`config.mode`配置完模式后，需要填入`config.mode_params`里面的必要参数。
+
 ## 主要接口说明
 ```
 void foc_init(FOC_Instance *foc, const FOC_InitConfig *config);  // 初始化 FOC 控制器实例
